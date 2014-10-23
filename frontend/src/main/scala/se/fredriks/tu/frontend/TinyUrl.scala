@@ -16,25 +16,23 @@ class TinyURL(conf:Config) {
 
   private val md = MessageDigest.getInstance("SHA-256")
 
-  def set(url:String) : Future[URLResult] = {
-    logger.debug("Shortening " + url)
-
+  private def createHash(url:String) = {
     val hash = md.digest(url.getBytes(Charsets.Utf8))
     val sb = new StringBuffer
     for (b <- hash) {
       sb.append(Integer.toHexString(b & 0xFF))
     }
+    sb.toString
+  }
 
-    val full_hash = sb.toString
+  def set(url:String) : Future[URLResult] = {
+    logger.debug("Shortening " + url)
 
-    val shash = full_hash.take(minSize)
+    val hash = createHash(url).take(minSize)
+    logger.debug("Hash is '" + hash + "'")
 
-    logger.debug("Hash is '" + shash + "'")
-
-    val json = "{\"URL\":\"" + shash + "\"}"
-
-    redis.setURL(shash, url) flatMap {Unit =>
-      Future value URLResult(Some(url), Some(shash))
+    redis.setURL(hash, url) flatMap {Unit =>
+      Future value URLResult(Some(url), Some(hash))
     }
   }
 

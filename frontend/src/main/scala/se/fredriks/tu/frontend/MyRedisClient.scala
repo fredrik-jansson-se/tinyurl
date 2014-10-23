@@ -19,9 +19,13 @@ class MyRedisClient (conf:Config) {
     redis.get(StringToChannelBuffer(tiny)) flatMap handleLookup
   }
 
+  def onError(e:Throwable): Unit = {
+    logger.error(e.getMessage)
+  }
+
   def setURL(tiny:String, url:String): Future[Unit] = {
     logger.debug("Storing " + tiny + " -> " + url)
-    redis.set(StringToChannelBuffer(tiny), StringToChannelBuffer(url))
+    redis.set(StringToChannelBuffer(tiny), StringToChannelBuffer(url)).onFailure(onError)
   }
 
 }

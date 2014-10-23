@@ -1,11 +1,13 @@
 package se.fredriks.tu.frontend
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.twitter.finagle.http._
 import com.twitter.finagle.http.path._
-import com.twitter.finagle.redis.util.StringToChannelBuffer
 import com.twitter.finagle.{Http, Service}
 import com.twitter.util._
 import com.typesafe.config.ConfigFactory
+import org.jboss.netty.buffer.{ChannelBufferOutputStream, ChannelBuffers}
 import org.jboss.netty.handler.codec.http.HttpHeaders.Names
 import org.jboss.netty.handler.codec.http._
 import org.jboss.netty.handler.codec.http.multipart.InterfaceHttpData.HttpDataType
@@ -36,10 +38,14 @@ object FrontendMain extends App {
     }
   }
 
-  //private def tinyToURL(tiny:String) =
+  val jsonMapper = new ObjectMapper()
+  jsonMapper.registerModule(DefaultScalaModule)
+
   private def json(res:URLResult) = {
-    val tiny = res.tiny.map(t => conf.getString("public_address") + "/lookup/" + t).getOrElse("")
-    """{"URL":"""" + res.url.getOrElse("") + """", "Tiny":"""" + tiny + """"}"""
+    val cb = ChannelBuffers.dynamicBuffer
+    val out = new ChannelBufferOutputStream(cb)
+    jsonMapper.writeValue(out, res)
+    cb
   }
 
   private def toRedirectResponse(res:URLResult) : Future[HttpResponse] = res.url match {
@@ -66,12 +72,12 @@ object FrontendMain extends App {
       case HttpDataType.Attribute =>
         val a = url.asInstanceOf[Attribute]
         logger.debug("Creating TinyURL for '"  + a.getValue + "'")
-        tinyURL.set(a.getValue) flatMap { res =>
+        tinyURL.set(a.getValue).flatMap({ res =>
           val resp = Response(HttpVersion.HTTP_1_1, HttpResponseStatus.OK)
           resp.setContentTypeJson()
-          resp.setContent(StringToChannelBuffer(json(res)))
+          resp.setContent(json(res))
           Future value resp
-        }
+        })
       case t =>
         logger.error("Unknown POST type" + t)
         Future value Response(req.getProtocolVersion, HttpResponseStatus.INTERNAL_SERVER_ERROR)
