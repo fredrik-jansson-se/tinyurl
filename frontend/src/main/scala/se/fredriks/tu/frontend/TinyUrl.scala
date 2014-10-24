@@ -12,7 +12,7 @@ case class URLResult(url:Option[String], tiny:Option[String])
 class TinyURL(conf:Config) {
   private val logger = LoggerFactory.getLogger(getClass)
   private val redis = new MyRedisClient(conf)
-  private val minSize = 6 // Get from config
+  private val minSize = conf.getInt("hash_size")
 
   private val md = MessageDigest.getInstance("SHA-256")
 
