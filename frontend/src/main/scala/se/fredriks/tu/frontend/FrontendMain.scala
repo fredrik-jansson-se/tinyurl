@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.twitter.finagle.http._
 import com.twitter.finagle.http.path._
-import com.twitter.finagle.{Http, Service}
+import com.twitter.finagle.{SimpleFilter, Http, Service}
 import com.twitter.util._
 import com.typesafe.config.ConfigFactory
 import org.jboss.netty.buffer.{ChannelBufferOutputStream, ChannelBuffers}
@@ -17,43 +17,50 @@ import org.slf4j.LoggerFactory
 object FrontendMain extends App {
   private val logger = LoggerFactory.getLogger(FrontendMain.getClass)
 
-  val service = new Service[HttpRequest, HttpResponse] {
-    def apply(req:HttpRequest) = {
-      logger.debug(req.toString)
-      try {
-        req.getMethod -> Path(req.getUri) match {
-          case HttpMethod.GET -> Root / "lookup" / tiny => lookup(req, tiny)
-          case HttpMethod.POST -> Root / "create" => create(req)
+  private class HandleExceptions extends SimpleFilter[HttpRequest, HttpResponse] {
+    def apply(request : HttpRequest, service:Service[HttpRequest, HttpResponse]) = {
+      service(request) handle { case error =>
+        logger.error(request + " error: " + error.getMessage)
+        val statusCode = error match {
+          case _ : NoSuchElementException => HttpResponseStatus.NOT_FOUND
+          case _ : MatchError => HttpResponseStatus.NOT_FOUND
+          case _ => HttpResponseStatus.INTERNAL_SERVER_ERROR
         }
-      }
-      catch {
-        case e:NoSuchElementException =>
-          Future value Response(req.getProtocolVersion, HttpResponseStatus.NOT_FOUND)
-        case e:MatchError =>
-          Future value Response(req.getProtocolVersion, HttpResponseStatus.NOT_FOUND)
-        case e:Exception =>
-          logger.error("apply error", e)
-          Future value Response(req.getProtocolVersion, HttpResponseStatus.INTERNAL_SERVER_ERROR)
+        Response(HttpVersion.HTTP_1_1, statusCode)
       }
     }
   }
 
-  val jsonMapper = new ObjectMapper()
+  private val handleExceptions = new HandleExceptions
+
+  private val service = new Service[HttpRequest, HttpResponse] {
+    def apply(req:HttpRequest) = {
+      logger.debug(req.toString)
+      req.getMethod -> Path(req.getUri) match {
+        case HttpMethod.GET -> Root / "lookup" / tiny => lookup(req, tiny)
+        case HttpMethod.POST -> Root / "create" => create(req)
+      }
+    }
+  }
+
+  private val jsonMapper = new ObjectMapper()
   jsonMapper.registerModule(DefaultScalaModule)
 
+
   private def json(res:URLResult) = {
+    val public_address = conf.getString("public_address")
     val cb = ChannelBuffers.dynamicBuffer
     val out = new ChannelBufferOutputStream(cb)
-    jsonMapper.writeValue(out, res)
+    jsonMapper.writeValue(out, new URLResult(res.url, Some(public_address + "/lookup/" + res.tiny.get)))
     cb
   }
 
   private def toRedirectResponse(res:URLResult) : Future[HttpResponse] = res.url match {
     case None =>
-      logger.debug("No URL found for " + res.tiny.get)
+      logger.debug("No URL found for " + res.tiny)
       Future value Response(HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_FOUND)
     case Some(url) =>
-      logger.debug("The URL for " + res.tiny.get + " is " + url)
+      logger.debug("The URL for " + res.tiny + " is " + url)
       val r = Response(HttpVersion.HTTP_1_1, HttpResponseStatus.FOUND)
       r.headers().set(Names.LOCATION, url)
       Future value r
@@ -64,6 +71,13 @@ object FrontendMain extends App {
     tinyURL.get(tiny) flatMap toRedirectResponse
   }
 
+  private def createResponse(res:URLResult) = {
+    val resp = Response(HttpVersion.HTTP_1_1, HttpResponseStatus.OK)
+    resp.setContentTypeJson()
+    resp.setContent(json(res))
+    Future value resp
+  }
+
   private def create(req:HttpRequest) : Future[HttpResponse] = try {
     val post = new HttpPostRequestDecoder(req)
 
@@ -72,15 +86,9 @@ object FrontendMain extends App {
       case HttpDataType.Attribute =>
         val a = url.asInstanceOf[Attribute]
         logger.debug("Creating TinyURL for '"  + a.getValue + "'")
-        tinyURL.set(a.getValue).flatMap({ res =>
-          val resp = Response(HttpVersion.HTTP_1_1, HttpResponseStatus.OK)
-          resp.setContentTypeJson()
-          resp.setContent(json(res))
-          Future value resp
-        })
+        tinyURL.set(a.getValue).flatMap(createResponse)
       case t =>
-        logger.error("Unknown POST type" + t)
-        Future value Response(req.getProtocolVersion, HttpResponseStatus.INTERNAL_SERVER_ERROR)
+        throw new RuntimeException("Unknown POST type " + t)
     }
   }
   catch {
@@ -96,7 +104,8 @@ object FrontendMain extends App {
 
   val serverAddress = conf.getString("finagle_address")
   logger.debug("Starting HTTP server on " + serverAddress)
-  val server = Http.serve(serverAddress, service)
+  val server = Http.serve(serverAddress, handleExceptions andThen service)
+
   logger.debug("Server started")
 
   // Wait for keyboard to stop
