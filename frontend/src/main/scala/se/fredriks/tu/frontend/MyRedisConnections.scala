@@ -8,9 +8,7 @@ import com.typesafe.config.Config
 import org.jboss.netty.buffer.ChannelBuffer
 import org.slf4j.LoggerFactory
 
-import scala.util.Random
-
-class MyRedisClient (conf:Config) {
+class MyRedisConnections (conf:Config) {
   private val logger = LoggerFactory.getLogger(getClass)
   private val redisMaster = RedisClient.newRichClient(conf.getString("redis_master"))
 
@@ -20,10 +18,7 @@ class MyRedisClient (conf:Config) {
         new RedisInfo(dest, RedisClient.newRichClient(dest))
       }.toList
 
-  private val rand = new Random(System.currentTimeMillis())
-
-  private def toString(res:Option[ChannelBuffer]) : Future[Option[String]] =
-    Future.value(res.map(CBToString(_)))
+  private def toString(res:Option[ChannelBuffer]) = Future.value(res.map(CBToString(_)))
 
   private def lookup(tiny:String, slaves:List[RedisInfo]) : Future[Option[String]] = slaves match {
     case Nil =>
@@ -35,12 +30,12 @@ class MyRedisClient (conf:Config) {
       }
   }
 
-  def getURL(tiny:String) : Future[Option[String]] = {
+  def lookup(tiny:String) : Future[Option[String]] = {
     val shuffledClients = scala.util.Random.shuffle(redisSlaves.toList)
     lookup(tiny, shuffledClients)
   }
 
-  def setURL(tiny:String, url:String): Future[Unit] = {
+  def create(tiny:String, url:String) = {
     logger.debug("Storing " + tiny + " -> " + url)
     redisMaster.set(StringToChannelBuffer(tiny), StringToChannelBuffer(url))
   }

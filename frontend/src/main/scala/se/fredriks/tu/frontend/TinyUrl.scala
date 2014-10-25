@@ -11,7 +11,7 @@ case class URLResult(url:Option[String], tiny:Option[String])
 
 class TinyURL(conf:Config) {
   private val logger = LoggerFactory.getLogger(getClass)
-  private val redis = new MyRedisClient(conf)
+  private val redis = new MyRedisConnections(conf)
   private val minSize = conf.getInt("hash_size")
 
   private val md = MessageDigest.getInstance("SHA-256")
@@ -25,18 +25,18 @@ class TinyURL(conf:Config) {
     sb.toString
   }
 
-  def set(url:String) : Future[URLResult] = {
+  def create(url:String) = {
     logger.debug("Shortening " + url)
 
     val hash = createHash(url).take(minSize)
     logger.debug("Hash is '" + hash + "'")
 
-    redis.setURL(hash, url) flatMap {Unit =>
+    redis.create(hash, url) flatMap {Unit =>
       Future value URLResult(Some(url), Some(hash))
     }
   }
 
-  def get(tiny:String) : Future[URLResult] = {
-    redis.getURL(tiny) flatMap(res => Future value URLResult(res, Some(tiny)))
+  def lookup(tiny:String) = {
+    redis.lookup(tiny) flatMap(res => Future value URLResult(res, Some(tiny)))
   }
 }

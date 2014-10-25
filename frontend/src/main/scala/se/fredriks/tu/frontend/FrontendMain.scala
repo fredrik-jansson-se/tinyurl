@@ -46,7 +46,6 @@ object FrontendMain extends App {
   private val jsonMapper = new ObjectMapper()
   jsonMapper.registerModule(DefaultScalaModule)
 
-
   private def json(res:URLResult) = {
     val public_address = conf.getString("public_address")
     val cb = ChannelBuffers.dynamicBuffer
@@ -55,7 +54,7 @@ object FrontendMain extends App {
     cb
   }
 
-  private def toRedirectResponse(res:URLResult) : Future[HttpResponse] = res.url match {
+  private def toRedirectResponse(res:URLResult) = res.url match {
     case None =>
       logger.debug("No URL found for " + res.tiny)
       Future value Response(HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_FOUND)
@@ -66,9 +65,9 @@ object FrontendMain extends App {
       Future value r
   }
 
-  private def lookup(req:HttpRequest, tiny:String) : Future[HttpResponse] = {
+  private def lookup(req:HttpRequest, tiny:String) = {
     logger.debug("Lookup '" + tiny + "'")
-    tinyURL.get(tiny) flatMap toRedirectResponse
+    tinyURL.lookup(tiny) flatMap toRedirectResponse
   }
 
   private def createResponse(res:URLResult) = {
@@ -78,30 +77,27 @@ object FrontendMain extends App {
     Future value resp
   }
 
-  private def create(req:HttpRequest) : Future[HttpResponse] = try {
+  private def create(req:HttpRequest) = {
     val post = new HttpPostRequestDecoder(req)
 
     val url = post.getBodyHttpData("URL")
+    if (null == url) throw new RuntimeException("No URL in POST")
     url.getHttpDataType match {
       case HttpDataType.Attribute =>
+        logger.debug("foo3")
         val a = url.asInstanceOf[Attribute]
         logger.debug("Creating TinyURL for '"  + a.getValue + "'")
-        tinyURL.set(a.getValue).flatMap(createResponse)
+        tinyURL.create(a.getValue).flatMap(createResponse)
       case t =>
         throw new RuntimeException("Unknown POST type " + t)
     }
   }
-  catch {
-    case e:Exception =>
-      logger.error("Created failed with", e.getMessage)
-      Future value Response(req.getProtocolVersion, HttpResponseStatus.INTERNAL_SERVER_ERROR)
-  }
 
   // load config
   val conf = ConfigFactory.load()
-
   val tinyURL = new TinyURL(conf)
 
+  // Server
   val serverAddress = conf.getString("finagle_address")
   logger.debug("Starting HTTP server on " + serverAddress)
   val server = Http.serve(serverAddress, handleExceptions andThen service)
