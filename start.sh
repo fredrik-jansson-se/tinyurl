@@ -10,6 +10,6 @@ SLAVE_1=$!
 redis/src/./redis-server --port 8888 --slaveof 127.0.0.1 6379 &
 SLAVE_2=$!
 
-sbt frontend/run
+./sbt frontend/run
 
 kill $SRV $SLAVE_1 $SLAVE_2
