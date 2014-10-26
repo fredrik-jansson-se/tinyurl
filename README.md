@@ -26,6 +26,7 @@ Create a tiny url:
 
 Test a tiny url
 * curl -v http://localhost:8080/lookup/7c7fea
+* Paste http://localhost:8080/lookup/7c7fea into a browser
 
 Solution returns HTTP 302 if lookup is successful, 404 if not
 
