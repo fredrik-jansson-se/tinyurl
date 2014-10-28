@@ -47,5 +47,6 @@ Possible Improvements
 * Check for hash collisions, if that happens, use a one char longer hash
 * If the master redis server failes, promote a slave to master
 * If a slave failes, mark it as bad, maybe just for a while.
+* Make it possible to shard/partition the writes over several masters
 
 
