@@ -10,6 +10,5 @@ libraryDependencies ++= Seq(
     , "com.typesafe" % "config" % "1.2.1"
     , "com.fasterxml.jackson.core" % "jackson-databind" % "2.4.3"
     , "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.4.3"
-    , "com.netflix.rxjava" % "rxjava-scala" % "0.20.6"
     )
 
