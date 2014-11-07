@@ -84,7 +84,6 @@ object FrontendMain extends App {
     if (null == url) throw new RuntimeException("No URL in POST")
     url.getHttpDataType match {
       case HttpDataType.Attribute =>
-        logger.debug("foo3")
         val a = url.asInstanceOf[Attribute]
         logger.debug("Creating TinyURL for '"  + a.getValue + "'")
         tinyURL.create(a.getValue).flatMap(createResponse)
@@ -113,5 +112,6 @@ object FrontendMain extends App {
       server.close(Time.fromMilliseconds(0))
     }
   }).start()
+
   Await.ready(server)
 }
